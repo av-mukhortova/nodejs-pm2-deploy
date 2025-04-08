@@ -1,27 +1,24 @@
+import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { Request, Response, NextFunction } from 'express';
-import { JWT_SECRET } from '../config';
-import UnauthorizedError from '../errors/unauthorized-error';
+import UnauthorizedError from '../errors/unauthorized-err';
+import { SessionRequest } from '../types';
 
-interface JwtPayload {
-  _id: string
-}
-
-const auth = (req: Request, res: Response, next: NextFunction) => {
-  try {
-    let token = req.cookies.jwt || req.headers.authorization;
-    if (!token) {
-      throw new UnauthorizedError('Токен не передан');
-    }
-    token = token.replace('Bearer ', '');
-    let payload: JwtPayload | null = null;
-
-    payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
-    req.user = payload;
-    next();
-  } catch (e) {
+export default (req: SessionRequest, _res: Response, next: NextFunction) => {
+  // const token = req.cookies.jwt;
+  const { authorization } = req.headers;
+  if (!authorization || !authorization.startsWith('Bearer ')) {
     next(new UnauthorizedError('Необходима авторизация'));
+  } else {
+    const token = authorization.replace('Bearer ', '');
+    const { NODE_ENV, JWT_SECRET } = process.env;
+    let payload;
+
+    try {
+      payload = jwt.verify(token, NODE_ENV === 'production' ? String(JWT_SECRET) : 'dev-secret');
+      req.user = payload;
+      next();
+    } catch {
+      next(new UnauthorizedError('Необходима авторизация'));
+    }
   }
 };
-
-export default auth;

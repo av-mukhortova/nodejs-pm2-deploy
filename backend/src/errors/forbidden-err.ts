@@ -1,5 +1,5 @@
 class ForbiddenError extends Error {
-  public statusCode: number;
+  statusCode: number;
 
   constructor(message: string) {
     super(message);

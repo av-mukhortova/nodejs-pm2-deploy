@@ -1,36 +1,38 @@
-import mongoose, { ObjectId } from 'mongoose';
-import { urlRegExp } from '../middlewares/validatons';
+import { model, Schema } from 'mongoose';
 
-interface ICard {
+export interface ICard {
   name: string;
   link: string;
-  owner: ObjectId;
-  likes: ObjectId[];
-  createdAt: Date | string;
+  owner: Schema.Types.ObjectId;
+  likes: Array<Schema.Types.ObjectId>;
+  createdAt: Date;
 }
 
-const cardsSchema = new mongoose.Schema<ICard>({
+const cardSchema = new Schema<ICard>({
   name: {
     type: String,
-    required: [true, 'Поле "name" должно быть заполнено'],
-    minlength: [2, 'Минимальная длина поля "name" - 2'],
-    maxlength: [30, 'Максимальная длина поля "name" - 30'],
+    minlength: 2,
+    maxlength: 30,
+    required: true,
   },
   link: {
     type: String,
-    required: [true, 'Поле "link" должно быть заполнено'],
+    required: true,
     validate: {
-      validator: (v: string) => urlRegExp.test(v),
-      message: 'Поле "link" должно быть валидным url-адресом.',
+      validator(v: string) {
+        return /^(https?:\/\/)(www\.)?([\w-]{1,32}\.[\w-]{1,32})[^\s@]*$/gm.test(v);
+      },
+      message: (props) => `${props.value} - некорректная ссылка`,
     },
   },
   owner: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'user',
+    type: Schema.Types.ObjectId,
     required: true,
   },
   likes: {
-    type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'user' }],
+    type: [{
+      type: Schema.Types.ObjectId,
+    }],
     default: [],
   },
   createdAt: {
@@ -39,4 +41,4 @@ const cardsSchema = new mongoose.Schema<ICard>({
   },
 }, { versionKey: false });
 
-export default mongoose.model<ICard>('card', cardsSchema);
+export default model<ICard>('card', cardSchema);

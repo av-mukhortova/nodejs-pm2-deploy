@@ -1,10 +1,11 @@
-import mongoose, { Model, Document, HydratedDocument } from 'mongoose';
+import {
+  model, Model, Schema, Document,
+} from 'mongoose';
 import validator from 'validator';
-import bcrypt from 'bcryptjs'; // импортируем bcrypt
-import { urlRegExp } from '../middlewares/validatons';
-import UnauthorizedError from '../errors/unauthorized-error';
+import bcrypt from 'bcryptjs';
+import UnauthorizedError from '../errors/unauthorized-err';
 
-interface IUser extends Document {
+export interface IUser {
   name: string;
   about: string;
   avatar: string;
@@ -12,75 +13,63 @@ interface IUser extends Document {
   password: string;
 }
 
-interface IUserMethods {
-  toJSON(): string;
+interface UserModel extends Model<IUser> {
+  findUserByCredentials: (email: string, password: string) => Promise<Document<unknown, any, IUser>>
 }
 
-interface IUserModel extends Model<IUser, {}, IUserMethods> {
-  findUserByCredentials: (email: string, password: string) =>
-                             Promise<HydratedDocument<IUser, IUserMethods>>;
-}
-
-const userSchema = new mongoose.Schema<IUser, IUserModel, IUserMethods>({
+const userSchema = new Schema<IUser, UserModel>({
   name: {
     type: String,
+    minlength: 2,
+    maxlength: 30,
     default: 'Жак-Ив Кусто',
-    minlength: [2, 'Минимальная длина поля "name" - 2'],
-    maxlength: [30, 'Максимальная длина поля "name" - 30'],
   },
   about: {
     type: String,
+    minlength: 2,
+    maxlength: 200,
     default: 'Исследователь',
-    minlength: [2, 'Минимальная длина поля "about" - 2'],
-    maxlength: [30, 'Максимальная длина поля "about" - 30'],
   },
   avatar: {
     type: String,
     default: 'https://pictures.s3.yandex.net/resources/jacques-cousteau_1604399756.png',
     validate: {
-      validator: (v: string) => urlRegExp.test(v),
-      message: 'Поле "avatar" должно быть валидным url-адресом.',
+      validator(v: string) {
+        return /^(https?:\/\/)(www\.)?([\w-]{1,32}\.[\w-]{1,32})[^\s@]*$/gm.test(v);
+      },
+      message: (props) => `${props.value} - некорректная ссылка`,
     },
   },
-  // в схеме пользователя есть обязательные email и password
   email: {
     type: String,
-    required: [true, 'Поле "email" должно быть заполнено'],
-    unique: true, // поле email уникально (есть опция unique: true);
+    unique: true,
+    required: true,
     validate: {
       validator: (v: string) => validator.isEmail(v),
-      message: 'Поле "email" должно быть валидным email-адресом',
+      message: 'Неправильный формат почты',
     },
   },
-  // поле password не имеет ограничения на длину, т.к. пароль хранится в виде хэша
   password: {
     type: String,
-    required: [true, 'Поле "password" должно быть заполнено'],
+    required: true,
     select: false,
   },
 }, { versionKey: false });
 
-userSchema.statics
-  .findUserByCredentials = function findByCredentials(email: string, password: string) {
-    return this.findOne({ email }).select('+password')
-      .then((user) => {
-        if (!user) {
-          return Promise.reject(new UnauthorizedError('Неправильные почта или пароль'));
-        }
-        return bcrypt.compare(password, user.password)
-          .then((matched) => {
-            if (!matched) {
-              return Promise.reject(new UnauthorizedError('Неправильные почта или пароль'));
-            }
-            return user;
-          });
-      });
-  };
+userSchema.static('findUserByCredentials', function findUserByCredentials(email: string, password: string) {
+  return this.findOne({ email }).select('+password').then((user) => {
+    if (!user) {
+      return Promise.reject(new UnauthorizedError('Передан неверный логин или пароль'));
+    }
 
-userSchema.methods.toJSON = function toJSON() {
-  const obj = this.toObject();
-  delete obj.password;
-  return obj;
-};
+    return bcrypt.compare(password, user.password).then((matched) => {
+      if (!matched) {
+        return Promise.reject(new UnauthorizedError('Передан неверный логин или пароль'));
+      }
 
-export default mongoose.model<IUser, IUserModel>('user', userSchema);
+      return user;
+    });
+  });
+});
+
+export default model<IUser, UserModel>('user', userSchema);

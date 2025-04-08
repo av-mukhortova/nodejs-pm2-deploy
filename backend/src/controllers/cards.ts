@@ -1,64 +1,92 @@
-import {
-  Request, Response, NextFunction,
-} from 'express';
+import { NextFunction, Request, Response } from 'express';
+import { JwtPayload } from 'jsonwebtoken';
 import Card from '../models/card';
-import BadRequestError from '../errors/bad-request-error';
-import NotFoundError from '../errors/not-found-error';
-import ForbiddenError from '../errors/forbidden-error';
+import NotFoundError from '../errors/not-found-err';
+import BadRequestError from '../errors/bad-request-err';
+import ForbiddenError from '../errors/forbidden-err';
+import { SessionRequest } from '../types';
 
-const getCards = (req: Request, res: Response, next: NextFunction) => {
-  Card.find({})
-    .then((cards) => res.send(cards))
-    .catch(next);
-};
+export const getCards = (_req: Request, res: Response, next: NextFunction) => Card.find({})
+  .then((cards) => {
+    res.send(cards);
+  })
+  .catch(next);
 
-const createCard = (req: Request, res: Response, next: NextFunction) => {
-  const owner = req.user._id;
+export const createCard = (req: any, res: Response, next: NextFunction) => {
   const { name, link } = req.body;
-  Card.create({ name, link, owner })
-    .then((card) => res.status(201).send(card))
+
+  return Card.create({ name, link, owner: req.user._id })
+    .then((card) => res.send(card))
     .catch((err) => {
       if (err.name === 'ValidationError') {
-        next(new BadRequestError(err.message));
+        next(new BadRequestError('Переданы некорректные данные'));
       } else {
         next(err);
       }
     });
 };
 
-const deleteCard = (req: Request, res: Response, next: NextFunction) => {
-  const { id } = req.params;
-  Card.findById(id)
-    .orFail(() => new NotFoundError('Нет карточки по заданному id'))
+export const deleteCardById = (req: SessionRequest, res: Response, next: NextFunction) => {
+  Card.findById(req.params.id)
     .then((card) => {
-      if (card.owner.toString() !== req.user._id) {
-        throw new ForbiddenError('Нельзя удалить чужую карточку');
+      if (!card) {
+        throw new NotFoundError('Запрашиваемая карточка не найдена');
       } else {
-        return Card.deleteOne({ _id: card._id })
-          .then(() => res.send(card));
+        const userPayload = req.user as JwtPayload;
+        const userId = userPayload ? userPayload._id : null;
+        if (userId === card.owner) {
+          Card.findByIdAndDelete(req.params.id)
+            .then((deletedCard) => {
+              res.send(deletedCard);
+            });
+        } else {
+          throw new ForbiddenError('Нет прав на удаление карточки');
+        }
       }
     })
-    .catch(next);
+    .catch((err) => {
+      if (err.name === 'CastError') {
+        next(new BadRequestError('Некорректный формат id карточки'));
+      } else {
+        next(err);
+      }
+    });
 };
 
-const updateLike = (req: Request, res: Response, next: NextFunction, method: string) => {
-  const { params: { id } } = req;
-  Card.findByIdAndUpdate(id, { [method]: { likes: req.user._id } }, { new: true })
-    .orFail(() => new NotFoundError('Нет карточки по заданному id'))
-    .then((card) => {
-      res.send(card);
-    })
-    .catch(next);
-};
+export const likeCard = (req: any, res: Response, next: NextFunction) => Card.findByIdAndUpdate(
+  req.params.id,
+  { $addToSet: { likes: req.user._id } },
+  { new: true },
+)
+  .then((card) => {
+    if (!card) {
+      throw new NotFoundError('Запрашиваемая карточка не найдена');
+    }
+    res.send(card);
+  })
+  .catch((err) => {
+    if (err.name === 'CastError') {
+      next(new BadRequestError('Некорректный формат id карточки'));
+    } else {
+      next(err);
+    }
+  });
 
-const likeCard = (req: Request, res: Response, next: NextFunction) => updateLike(req, res, next, '$addToSet');
-
-const dislikeCard = (req: Request, res: Response, next: NextFunction) => updateLike(req, res, next, '$pull');
-
-export {
-  getCards,
-  createCard,
-  deleteCard,
-  likeCard,
-  dislikeCard,
-};
+export const dislikeCard = (req: any, res: Response, next: NextFunction) => Card.findByIdAndUpdate(
+  req.params.id,
+  { $pull: { likes: req.user._id } },
+  { new: true },
+)
+  .then((card) => {
+    if (!card) {
+      throw new NotFoundError('Запрашиваемая карточка не найдена');
+    }
+    res.send(card);
+  })
+  .catch((err) => {
+    if (err.name === 'CastError') {
+      next(new BadRequestError('Некорректный формат id карточки'));
+    } else {
+      next(err);
+    }
+  });
