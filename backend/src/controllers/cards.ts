@@ -33,10 +33,8 @@ export const deleteCardById = (req: SessionRequest, res: Response, next: NextFun
         throw new NotFoundError('Запрашиваемая карточка не найдена');
       } else {
         const userPayload = req.user as JwtPayload;
-        console.log('user', userPayload);
-        console.log('owner', card.owner.toString());
         const userId = userPayload ? userPayload._id : null;
-        if (userId === card.owner) {
+        if (userId === card.owner.toString()) {
           Card.findByIdAndDelete(req.params.id)
             .then((deletedCard) => {
               res.send(deletedCard);
