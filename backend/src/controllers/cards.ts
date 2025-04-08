@@ -34,7 +34,7 @@ export const deleteCardById = (req: SessionRequest, res: Response, next: NextFun
       } else {
         const userPayload = req.user as JwtPayload;
         console.log('user', userPayload);
-        console.log('owner', card.owner);
+        console.log('owner', card.owner.toString());
         const userId = userPayload ? userPayload._id : null;
         if (userId === card.owner) {
           Card.findByIdAndDelete(req.params.id)
